@@ -1,0 +1,17 @@
+[package]
+name = "spark-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spark-types = { path = "../spark-types" }
+spark-providers = { path = "../spark-providers" }
+axum = { workspace = true }
+axum-extra = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+http = { workspace = true }

@@ -1,0 +1,63 @@
+use leptos::prelude::*;
+use leptos_meta::*;
+use leptos_router::{
+    components::{Route, Router, Routes},
+    StaticSegment,
+};
+
+use crate::components::nav::Nav;
+use crate::pages::dashboard::DashboardPage;
+use crate::pages::login::LoginPage;
+
+pub fn shell(options: LeptosOptions) -> impl IntoView {
+    view! {
+        <!DOCTYPE html>
+        <html lang="en">
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <AutoReload options=options.clone() />
+                <HydrationScripts options />
+                <MetaTags />
+            </head>
+            <body>
+                <App />
+            </body>
+        </html>
+    }
+}
+
+#[component]
+pub fn App() -> impl IntoView {
+    provide_meta_context();
+
+    view! {
+        <Stylesheet id="leptos" href="/pkg/spark-console.css" />
+        <Title text="Spark Console" />
+        <Router>
+            <Routes fallback=|| view! { <p>"Page not found."</p> }.into_any()>
+                <Route path=StaticSegment("") view=DashboardView />
+                <Route path=StaticSegment("login") view=LoginView />
+            </Routes>
+        </Router>
+    }
+}
+
+#[component]
+fn DashboardView() -> impl IntoView {
+    view! {
+        <div class="app-layout">
+            <Nav />
+            <main class="main-content">
+                <DashboardPage />
+            </main>
+        </div>
+    }
+}
+
+#[component]
+fn LoginView() -> impl IntoView {
+    view! {
+        <LoginPage />
+    }
+}
