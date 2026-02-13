@@ -431,6 +431,133 @@ tr:hover {
     }
 }
 
+/* Containers page */
+.container-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.container-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.container-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.container-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.container-name {
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.container-status-text {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-left: 0.25rem;
+}
+
+.status-badge {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.status-running {
+    background-color: var(--accent);
+}
+
+.status-stopped {
+    background-color: var(--danger);
+}
+
+.status-other {
+    background-color: var(--warning);
+}
+
+.container-image {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.container-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.stat-pair {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.stat-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.stat-value {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.container-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.container-details-toggle {
+    display: flex;
+}
+
+.container-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--border);
+}
+
+.detail-mounts {
+    word-break: break-all;
+    font-size: 0.75rem;
+}
+
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+}
+
+.container-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .nav-sidebar {

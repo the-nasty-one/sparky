@@ -7,6 +7,7 @@ use leptos_router::{
 
 use crate::components::nav::Nav;
 use crate::components::toast::ToastProvider;
+use crate::pages::containers::ContainersPage;
 use crate::pages::dashboard::DashboardPage;
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
@@ -38,6 +39,7 @@ pub fn App() -> impl IntoView {
             <Router>
                 <Routes fallback=|| view! { <p>"Page not found."</p> }.into_any()>
                     <Route path=StaticSegment("") view=DashboardView />
+                    <Route path=StaticSegment("containers") view=ContainersView />
                 </Routes>
             </Router>
         </ToastProvider>
@@ -51,6 +53,18 @@ fn DashboardView() -> impl IntoView {
             <Nav />
             <main class="main-content">
                 <DashboardPage />
+            </main>
+        </div>
+    }
+}
+
+#[component]
+fn ContainersView() -> impl IntoView {
+    view! {
+        <div class="app-layout">
+            <Nav />
+            <main class="main-content">
+                <ContainersPage />
             </main>
         </div>
     }

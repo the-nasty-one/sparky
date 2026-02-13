@@ -120,3 +120,72 @@ impl Default for UptimeMetrics {
         Self { seconds: 0 }
     }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ContainerSummary {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub status: ContainerStatus,
+    pub state_text: String,
+    pub cpu_pct: f64,
+    pub memory_usage_bytes: u64,
+    pub memory_limit_bytes: u64,
+    pub net_rx_bytes: u64,
+    pub net_tx_bytes: u64,
+    pub ports: Vec<String>,
+    pub runtime: String,
+    pub restart_policy: String,
+    pub created: String,
+    pub mounts: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum ContainerStatus {
+    Running,
+    Stopped,
+    Restarting,
+    Paused,
+    Dead,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ContainerAction {
+    pub container_id: String,
+    pub action: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ContainerActionResult {
+    pub success: bool,
+    pub message: String,
+}
+
+impl Default for ContainerSummary {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            image: String::new(),
+            status: ContainerStatus::default(),
+            state_text: String::new(),
+            cpu_pct: 0.0,
+            memory_usage_bytes: 0,
+            memory_limit_bytes: 0,
+            net_rx_bytes: 0,
+            net_tx_bytes: 0,
+            ports: Vec::new(),
+            runtime: String::new(),
+            restart_policy: String::new(),
+            created: String::new(),
+            mounts: Vec::new(),
+        }
+    }
+}
+
+impl Default for ContainerStatus {
+    fn default() -> Self {
+        ContainerStatus::Unknown
+    }
+}
