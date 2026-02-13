@@ -44,7 +44,7 @@ async fn handle_login(
     }
 
     let cookieValue = format!(
-        "session_token={}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800",
+        "session_token={}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=604800",
         body.token
     );
 

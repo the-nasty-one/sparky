@@ -43,22 +43,27 @@ async fn collect_from_nvidia_smi() -> Result<GpuMetrics, String> {
     let utilizationPct = gpuFields[1]
         .trim()
         .parse::<f32>()
+        .inspect_err(|e| warn!("failed to parse GPU utilization '{}': {e}", gpuFields[1].trim()))
         .unwrap_or(0.0);
     let temperatureC = gpuFields[2]
         .trim()
         .parse::<u32>()
+        .inspect_err(|e| warn!("failed to parse GPU temperature '{}': {e}", gpuFields[2].trim()))
         .unwrap_or(0);
     let memoryUsedMib = gpuFields[3]
         .trim()
         .parse::<u64>()
+        .inspect_err(|e| warn!("failed to parse GPU memory used '{}': {e}", gpuFields[3].trim()))
         .unwrap_or(0);
     let memoryTotalMib = gpuFields[4]
         .trim()
         .parse::<u64>()
+        .inspect_err(|e| warn!("failed to parse GPU memory total '{}': {e}", gpuFields[4].trim()))
         .unwrap_or(0);
     let powerDrawW = gpuFields[5]
         .trim()
         .parse::<f32>()
+        .inspect_err(|e| warn!("failed to parse GPU power draw '{}': {e}", gpuFields[5].trim()))
         .unwrap_or(0.0);
 
     let processes = collect_gpu_processes().await.unwrap_or_default();
@@ -99,9 +104,13 @@ async fn collect_gpu_processes() -> Result<Vec<GpuProcess>, String> {
 
         let fields: Vec<&str> = line.split(", ").collect();
         if fields.len() >= 3 {
-            let pid = fields[0].trim().parse::<u32>().unwrap_or(0);
+            let pid = fields[0].trim().parse::<u32>()
+                .inspect_err(|e| warn!("failed to parse GPU process PID '{}': {e}", fields[0].trim()))
+                .unwrap_or(0);
             let name = fields[1].trim().to_string();
-            let memoryMib = fields[2].trim().parse::<u64>().unwrap_or(0);
+            let memoryMib = fields[2].trim().parse::<u64>()
+                .inspect_err(|e| warn!("failed to parse GPU process memory '{}': {e}", fields[2].trim()))
+                .unwrap_or(0);
 
             processes.push(GpuProcess {
                 pid,

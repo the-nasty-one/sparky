@@ -10,6 +10,10 @@ ExecStart=/usr/local/bin/spark-console --config /etc/spark-console/config.toml
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
+ProtectSystem=strict
+ReadWritePaths=/etc/spark-console
+PrivateTmp=yes
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target
