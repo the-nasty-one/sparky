@@ -1,5 +1,6 @@
 use axum::{
     extract::State,
+    http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
@@ -14,9 +15,11 @@ pub fn routes(_state: AppState) -> Router<AppState> {
 
 async fn get_containers(
     State(_state): State<AppState>,
-) -> Json<Vec<spark_types::ContainerSummary>> {
-    let containers = spark_providers::docker::collect().await;
-    Json(containers)
+) -> Result<Json<Vec<spark_types::ContainerSummary>>, (StatusCode, String)> {
+    match spark_providers::docker::collect().await {
+        Ok(containers) => Ok(Json(containers)),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
+    }
 }
 
 async fn post_container_action(

@@ -48,17 +48,11 @@ fn parse_status(state: &str) -> ContainerStatus {
     }
 }
 
-pub async fn collect() -> Vec<ContainerSummary> {
-    let containers = match collect_container_list().await {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("docker ps failed: {e}");
-            return Vec::new();
-        }
-    };
+pub async fn collect() -> Result<Vec<ContainerSummary>, String> {
+    let containers = collect_container_list().await?;
 
     if containers.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
     // Collect stats for running containers
@@ -74,7 +68,7 @@ pub async fn collect() -> Vec<ContainerSummary> {
     let inspectMap = collect_inspect(&ids).await;
 
     // Merge everything
-    containers
+    Ok(containers
         .into_iter()
         .map(|mut c| {
             if let Some(stats) = statsMap.get(&c.name) {
@@ -91,7 +85,7 @@ pub async fn collect() -> Vec<ContainerSummary> {
             }
             c
         })
-        .collect()
+        .collect())
 }
 
 struct StatsData {
