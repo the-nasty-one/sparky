@@ -40,17 +40,26 @@ fn gauge_color(value: f32) -> &'static str {
 
 #[component]
 pub fn DashboardPage() -> impl IntoView {
-    let metricsResource = Resource::new(|| (), |_| get_system_metrics());
+    // Hold latest metrics in a signal — never re-enters loading after first data arrives.
+    #[allow(unused_variables)]
+    let (metrics, setMetrics) = signal(Option::<Result<SystemMetrics, String>>::None);
 
     #[cfg(feature = "hydrate")]
     {
-        let refetch = metricsResource;
-        set_interval(
-            move || {
-                refetch.refetch();
-            },
-            std::time::Duration::from_secs(2),
-        );
+        use wasm_bindgen_futures::spawn_local;
+
+        let fetch = move || {
+            spawn_local(async move {
+                let result = get_system_metrics().await.map_err(|e| e.to_string());
+                setMetrics.set(Some(result));
+            });
+        };
+
+        // Initial fetch on mount
+        fetch();
+
+        // Poll every 2 seconds — updates the signal in place, no flicker
+        set_interval(fetch, std::time::Duration::from_secs(2));
     }
 
     view! {
@@ -58,34 +67,30 @@ pub fn DashboardPage() -> impl IntoView {
             <h1>"System Dashboard"</h1>
             <p class="subtitle">"DGX Spark real-time metrics"</p>
         </div>
-        <Suspense fallback=move || {
-            view! {
-                <div class="loading">
-                    <div class="spinner"></div>
-                    "Loading system metrics..."
-                </div>
+        {move || {
+            match metrics.get() {
+                None => {
+                    view! {
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            "Loading system metrics..."
+                        </div>
+                    }
+                        .into_any()
+                }
+                Some(Ok(m)) => {
+                    view! { <DashboardContent metrics=m /> }.into_any()
+                }
+                Some(Err(e)) => {
+                    view! {
+                        <div class="card">
+                            <p class="login-error">"Failed to load metrics: " {e}</p>
+                        </div>
+                    }
+                        .into_any()
+                }
             }
-        }>
-            {move || {
-                metricsResource
-                    .get()
-                    .map(|result| {
-                        match result {
-                            Ok(metrics) => view! { <DashboardContent metrics=metrics /> }.into_any(),
-                            Err(e) => {
-                                view! {
-                                    <div class="card">
-                                        <p class="login-error">
-                                            "Failed to load metrics: " {e.to_string()}
-                                        </p>
-                                    </div>
-                                }
-                                    .into_any()
-                            }
-                        }
-                    })
-            }}
-        </Suspense>
+        }}
     }
 }
 

@@ -1955,6 +1955,7 @@ dependencies = [
  "spark-providers",
  "spark-types",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
