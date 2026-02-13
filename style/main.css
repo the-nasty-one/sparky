@@ -590,6 +590,16 @@ tr:hover {
     color: var(--text-secondary);
 }
 
+.container-action-error {
+    background-color: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    color: var(--danger);
+    font-size: 0.875rem;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .nav-sidebar {

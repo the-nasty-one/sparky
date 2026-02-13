@@ -3,7 +3,9 @@ use spark_types::{ContainerActionResult, ContainerStatus, ContainerSummary};
 
 #[server]
 async fn get_containers() -> Result<Vec<ContainerSummary>, ServerFnError> {
-    Ok(spark_providers::docker::collect().await)
+    spark_providers::docker::collect()
+        .await
+        .map_err(|e| ServerFnError::new(e))
 }
 
 #[server]
@@ -65,6 +67,8 @@ pub fn ContainersPage() -> impl IntoView {
     #[allow(unused_variables)]
     let (pendingAction, setPendingAction) = signal(Option::<String>::None);
     #[allow(unused_variables)]
+    let (actionError, setActionError) = signal(Option::<String>::None);
+    #[allow(unused_variables)]
     let (expandedIds, setExpandedIds) = signal(Vec::<String>::new());
 
     #[cfg(feature = "hydrate")]
@@ -87,6 +91,15 @@ pub fn ContainersPage() -> impl IntoView {
             <h1>"Containers"</h1>
             <p class="subtitle">"Docker container management"</p>
         </div>
+        {move || {
+            actionError.get().map(|msg| {
+                view! {
+                    <div class="container-action-error">
+                        <p>{msg}</p>
+                    </div>
+                }
+            })
+        }}
         {move || {
             match containers.get() {
                 None => {
@@ -159,17 +172,28 @@ pub fn ContainersPage() -> impl IntoView {
                                         let cid = containerId.clone();
                                         move |_| {
                                             let cid = cid.clone();
+                                            setActionError.set(None);
                                             setPendingAction.set(Some(cid.clone()));
                                             #[cfg(feature = "hydrate")]
                                             {
                                                 use wasm_bindgen_futures::spawn_local;
                                                 let cid2 = cid.clone();
                                                 spawn_local(async move {
-                                                    let _ = container_action(
+                                                    match container_action(
                                                         cid2,
                                                         action.to_string(),
                                                     )
-                                                    .await;
+                                                    .await
+                                                    {
+                                                        Ok(res) if !res.success => {
+                                                            setActionError.set(Some(res.message));
+                                                        }
+                                                        Err(e) => {
+                                                            setActionError
+                                                                .set(Some(e.to_string()));
+                                                        }
+                                                        _ => {}
+                                                    }
                                                     let result = get_containers()
                                                         .await
                                                         .map_err(|e| e.to_string());
