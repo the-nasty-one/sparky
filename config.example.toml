@@ -2,9 +2,6 @@
 bind = "0.0.0.0"
 port = 3000
 
-[auth]
-token = "change-me-on-first-run"
-
 [providers]
 # Paths to scan for models (Phase 3)
 model_dirs = ["/opt/models", "/opt/ComfyUI/models"]

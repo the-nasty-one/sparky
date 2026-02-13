@@ -7,7 +7,6 @@ mod config {
     #[derive(Deserialize, Clone, Debug)]
     pub struct Config {
         pub server: ServerConfig,
-        pub auth: AuthConfig,
     }
 
     #[derive(Deserialize, Clone, Debug)]
@@ -16,20 +15,12 @@ mod config {
         pub port: u16,
     }
 
-    #[derive(Deserialize, Clone, Debug)]
-    pub struct AuthConfig {
-        pub token: String,
-    }
-
     impl Default for Config {
         fn default() -> Self {
             Self {
                 server: ServerConfig {
                     bind: "0.0.0.0".into(),
                     port: 3000,
-                },
-                auth: AuthConfig {
-                    token: "change-me-on-first-run".into(),
                 },
             }
         }
@@ -59,7 +50,6 @@ async fn main() {
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
     use spark_api::middleware::auth::AppState;
-    use spark_types::AuthToken;
     use spark_ui::{shell, App};
     use tower_http::trace::TraceLayer;
     use tracing_subscriber::{fmt, EnvFilter};
@@ -88,10 +78,7 @@ async fn main() {
         appConfig.server.port
     );
 
-    let authToken = AuthToken(appConfig.auth.token.clone());
-
     let appState = AppState {
-        auth_token: appConfig.auth.token.clone(),
         config_path: configPath,
     };
 
@@ -104,28 +91,16 @@ async fn main() {
     let routes = generate_route_list(App);
 
     // Build the API sub-router with its own state, then convert to a stateless Router
-    let apiRouter = spark_api::api_router(appState.clone());
-
-    // Build page auth middleware that checks session cookie
-    let pageAuthLayer = axum::middleware::from_fn_with_state(
-        appState,
-        spark_api::middleware::auth::require_page_auth,
-    );
+    let apiRouter = spark_api::api_router(appState);
 
     // Compose the full router:
     // - API routes are nested and carry their own AppState (via .with_state)
     // - Leptos routes use LeptosOptions as state
-    // - Page auth is applied as a layer
     let app = Router::new()
         .leptos_routes_with_context(
             &leptosOptions,
             routes,
-            {
-                let authToken = authToken.clone();
-                move || {
-                    leptos::prelude::provide_context(authToken.clone());
-                }
-            },
+            move || {},
             {
                 let leptosOptions = leptosOptions.clone();
                 move || shell(leptosOptions.clone())
@@ -134,7 +109,6 @@ async fn main() {
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptosOptions)
         .merge(apiRouter)
-        .layer(pageAuthLayer)
         .layer(TraceLayer::new_for_http());
 
     tracing::info!("listening on {addr}");
