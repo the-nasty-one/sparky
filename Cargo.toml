@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/spark-types",
+    "crates/spark-providers",
+    "crates/spark-api",
+    "crates/spark-ui",
+    "crates/spark-console",
+]
+
+[[workspace.metadata.leptos]]
+name = "spark-console"
+bin-package = "spark-console"
+lib-package = "spark-ui"
+output-name = "spark-console"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+style-file = "style/main.css"
+assets-dir = "public"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+bin-features = ["ssr"]
+lib-features = ["hydrate"]
+lib-default-features = false
+end2end-cmd = ""
+browserquery = "defaults"
+
+[workspace.dependencies]
+leptos = { version = "0.7", default-features = false }
+leptos_meta = { version = "0.7", default-features = false }
+leptos_router = { version = "0.7", default-features = false }
+leptos_axum = { version = "0.7" }
+axum = "0.7"
+axum-extra = { version = "0.9", features = ["cookie"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+nix = { version = "0.29", features = ["fs"] }
+thiserror = "2"
+http = "1"
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"

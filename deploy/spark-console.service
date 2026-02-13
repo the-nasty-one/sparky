@@ -1,0 +1,15 @@
+[Unit]
+Description=Spark Console Dashboard
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/spark-console --config /etc/spark-console/config.toml
+Restart=always
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target
