@@ -9,7 +9,7 @@ use crate::middleware::auth::AppState;
 pub fn routes(_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/api/v1/containers", get(get_containers))
-        .route("/api/v1/containers/action", post(container_action))
+        .route("/api/v1/containers/action", post(post_container_action))
 }
 
 async fn get_containers(
@@ -19,10 +19,11 @@ async fn get_containers(
     Json(containers)
 }
 
-async fn container_action(
+async fn post_container_action(
     State(_state): State<AppState>,
-    Json(body): Json<spark_types::ContainerAction>,
+    Json(action): Json<spark_types::ContainerAction>,
 ) -> Json<spark_types::ContainerActionResult> {
-    let result = spark_providers::docker::execute_action(&body.container_id, &body.action).await;
+    let result =
+        spark_providers::docker::execute_action(&action.container_id, &action.action).await;
     Json(result)
 }

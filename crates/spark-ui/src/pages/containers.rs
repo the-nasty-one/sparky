@@ -14,25 +14,22 @@ async fn container_action(
     Ok(spark_providers::docker::execute_action(&container_id, &action).await)
 }
 
-fn format_bytes_net(bytes: u64) -> String {
-    const KB: f64 = 1000.0;
-    const MB: f64 = 1_000_000.0;
-    const GB: f64 = 1_000_000_000.0;
+fn format_net_bytes(bytes: u64) -> String {
     let b = bytes as f64;
-    if b >= GB {
-        format!("{:.1} GB", b / GB)
-    } else if b >= MB {
-        format!("{:.1} MB", b / MB)
-    } else if b >= KB {
-        format!("{:.1} KB", b / KB)
+    if b >= 1_000_000_000.0 {
+        format!("{:.1} GB", b / 1_000_000_000.0)
+    } else if b >= 1_000_000.0 {
+        format!("{:.1} MB", b / 1_000_000.0)
+    } else if b >= 1_000.0 {
+        format!("{:.1} KB", b / 1_000.0)
     } else {
-        format!("{} B", bytes)
+        format!("{bytes} B")
     }
 }
 
-fn format_bytes_mem(bytes: u64) -> String {
-    const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
-    const MIB: f64 = 1024.0 * 1024.0;
+fn format_mem_bytes(bytes: u64) -> String {
+    const GIB: f64 = 1_073_741_824.0;
+    const MIB: f64 = 1_048_576.0;
     let b = bytes as f64;
     if b >= GIB {
         format!("{:.1} GiB", b / GIB)
@@ -63,9 +60,12 @@ fn status_label(status: &ContainerStatus) -> &'static str {
 #[component]
 pub fn ContainersPage() -> impl IntoView {
     #[allow(unused_variables)]
-    let (containers, setContainers) = signal(Option::<Result<Vec<ContainerSummary>, String>>::None);
+    let (containers, setContainers) =
+        signal(Option::<Result<Vec<ContainerSummary>, String>>::None);
     #[allow(unused_variables)]
-    let (actionLoading, setActionLoading) = signal(Option::<String>::None);
+    let (pendingAction, setPendingAction) = signal(Option::<String>::None);
+    #[allow(unused_variables)]
+    let (expandedIds, setExpandedIds) = signal(Vec::<String>::new());
 
     #[cfg(feature = "hydrate")]
     {
@@ -78,46 +78,30 @@ pub fn ContainersPage() -> impl IntoView {
             });
         };
 
-        // Initial fetch on mount
         fetch();
-
-        // Poll every 5 seconds
         set_interval(fetch, std::time::Duration::from_secs(5));
     }
-
-    let handleAction = move |containerId: String, action: String| {
-        #[cfg(feature = "hydrate")]
-        {
-            use wasm_bindgen_futures::spawn_local;
-            setActionLoading.set(Some(containerId.clone()));
-            let containerId2 = containerId.clone();
-            spawn_local(async move {
-                let _result = container_action(containerId2, action).await;
-                setActionLoading.set(None);
-                // Refetch containers
-                let result = get_containers().await.map_err(|e| e.to_string());
-                setContainers.set(Some(result));
-            });
-        }
-        #[cfg(not(feature = "hydrate"))]
-        {
-            let _ = (containerId, action);
-        }
-    };
 
     view! {
         <div class="dashboard-header">
             <h1>"Containers"</h1>
-            <p class="subtitle">"Docker containers and live stats"</p>
+            <p class="subtitle">"Docker container management"</p>
         </div>
         {move || {
-            let handleAction = handleAction.clone();
             match containers.get() {
                 None => {
                     view! {
                         <div class="loading">
                             <div class="spinner"></div>
                             "Loading containers..."
+                        </div>
+                    }
+                        .into_any()
+                }
+                Some(Err(e)) => {
+                    view! {
+                        <div class="card">
+                            <p style="color: var(--danger)">"Failed to load containers: " {e}</p>
                         </div>
                     }
                         .into_any()
@@ -131,217 +115,331 @@ pub fn ContainersPage() -> impl IntoView {
                         }
                             .into_any()
                     } else {
-                        let currentAction = actionLoading.get();
-                        view! {
-                            <div class="container-list">
-                                {list
-                                    .into_iter()
-                                    .map(|c| {
-                                        let handleAction = handleAction.clone();
-                                        let isLoading = currentAction
-                                            .as_ref()
-                                            .map(|id| id == &c.id)
-                                            .unwrap_or(false);
-                                        view! {
-                                            <ContainerCard
-                                                container=c
-                                                on_action=handleAction
-                                                is_loading=isLoading
-                                            />
+                        let items = list
+                            .into_iter()
+                            .map(|c| {
+                                let containerId = c.id.clone();
+                                let containerName = c.name.clone();
+                                let containerImage = c.image.clone();
+                                let containerStatus = c.status.clone();
+                                let stateText = c.state_text.clone();
+                                let cpuPct = c.cpu_pct;
+                                let memUsage = c.memory_usage_bytes;
+                                let memLimit = c.memory_limit_bytes;
+                                let netRx = c.net_rx_bytes;
+                                let netTx = c.net_tx_bytes;
+                                let ports = c.ports.clone();
+                                let runtime = c.runtime.clone();
+                                let restartPolicy = c.restart_policy.clone();
+                                let created = c.created.clone();
+                                let mounts = c.mounts.clone();
+                                let isRunning = containerStatus == ContainerStatus::Running;
+                                let isStopped = containerStatus == ContainerStatus::Stopped;
+                                let statusCls = status_class(&containerStatus);
+                                let statusLbl = status_label(&containerStatus);
+
+                                // Clone IDs for each closure that needs them
+                                let idForToggle = containerId.clone();
+
+                                let toggleExpand = move |_| {
+                                    let id = idForToggle.clone();
+                                    setExpandedIds.update(|ids| {
+                                        if let Some(pos) = ids.iter().position(|x| x == &id) {
+                                            ids.remove(pos);
+                                        } else {
+                                            ids.push(id);
                                         }
-                                    })
-                                    .collect_view()}
-                            </div>
-                        }
-                            .into_any()
+                                    });
+                                };
+
+                                #[allow(unused_variables)]
+                                let makeAction = {
+                                    let containerId = containerId.clone();
+                                    move |action: &'static str| {
+                                        let cid = containerId.clone();
+                                        move |_| {
+                                            let cid = cid.clone();
+                                            setPendingAction.set(Some(cid.clone()));
+                                            #[cfg(feature = "hydrate")]
+                                            {
+                                                use wasm_bindgen_futures::spawn_local;
+                                                let cid2 = cid.clone();
+                                                spawn_local(async move {
+                                                    let _ = container_action(
+                                                        cid2,
+                                                        action.to_string(),
+                                                    )
+                                                    .await;
+                                                    let result = get_containers()
+                                                        .await
+                                                        .map_err(|e| e.to_string());
+                                                    setContainers.set(Some(result));
+                                                    setPendingAction.set(None);
+                                                });
+                                            }
+                                        }
+                                    }
+                                };
+
+                                let onStart = makeAction("start");
+                                let onStop = makeAction("stop");
+                                let onRestart = makeAction("restart");
+
+                                let hasDetails = !ports.is_empty()
+                                    || !runtime.is_empty()
+                                    || !restartPolicy.is_empty()
+                                    || !mounts.is_empty();
+
+                                // Clone containerId for each closure that checks pending
+                                let idPend1 = containerId.clone();
+                                let idPend2 = containerId.clone();
+                                let idPend3 = containerId.clone();
+                                let idPend4 = containerId.clone();
+                                let idPend5 = containerId.clone();
+                                let idPend6 = containerId.clone();
+
+                                // Clone containerId for each closure that checks expanded
+                                let idExp1 = containerId.clone();
+                                let idExp2 = containerId.clone();
+
+                                view! {
+                                    <div class="container-card card">
+                                        <div class="container-header">
+                                            <div class="container-name-row">
+                                                <span class=format!(
+                                                    "status-badge {statusCls}",
+                                                )></span>
+                                                <span class="container-name">{containerName}</span>
+                                                <span class="container-status-text">{statusLbl}</span>
+                                            </div>
+                                            <span class="container-state-detail">{stateText}</span>
+                                        </div>
+                                        <div class="container-image">{containerImage}</div>
+
+                                        {if isRunning {
+                                            view! {
+                                                <div class="container-stats">
+                                                    <div class="stat-pair">
+                                                        <span class="stat-label">"CPU"</span>
+                                                        <span class="stat-value">
+                                                            {format!("{:.1}%", cpuPct)}
+                                                        </span>
+                                                    </div>
+                                                    <div class="stat-pair">
+                                                        <span class="stat-label">"Memory"</span>
+                                                        <span class="stat-value">
+                                                            {format!(
+                                                                "{} / {}",
+                                                                format_mem_bytes(memUsage),
+                                                                format_mem_bytes(memLimit),
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    <div class="stat-pair">
+                                                        <span class="stat-label">"Net I/O"</span>
+                                                        <span class="stat-value">
+                                                            {format!(
+                                                                "{} / {}",
+                                                                format_net_bytes(netRx),
+                                                                format_net_bytes(netTx),
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            }
+                                                .into_any()
+                                        } else {
+                                            view! {}.into_any()
+                                        }}
+
+                                        <div class="container-actions">
+                                            <button
+                                                class="btn btn-sm btn-ghost"
+                                                disabled=move || {
+                                                    isRunning
+                                                        || pendingAction.get().as_ref() == Some(&idPend1)
+                                                }
+                                                on:click=onStart
+                                            >
+                                                {move || {
+                                                    if pendingAction.get().as_ref() == Some(&idPend2) {
+                                                        "Starting..."
+                                                    } else {
+                                                        "Start"
+                                                    }
+                                                }}
+                                            </button>
+                                            <button
+                                                class="btn btn-sm btn-ghost"
+                                                disabled=move || {
+                                                    isStopped
+                                                        || pendingAction.get().as_ref() == Some(&idPend3)
+                                                }
+                                                on:click=onStop
+                                            >
+                                                {move || {
+                                                    if pendingAction.get().as_ref() == Some(&idPend4) {
+                                                        "Stopping..."
+                                                    } else {
+                                                        "Stop"
+                                                    }
+                                                }}
+                                            </button>
+                                            <button
+                                                class="btn btn-sm btn-ghost"
+                                                disabled=move || {
+                                                    !isRunning
+                                                        || pendingAction.get().as_ref() == Some(&idPend5)
+                                                }
+                                                on:click=onRestart
+                                            >
+                                                {move || {
+                                                    if pendingAction.get().as_ref() == Some(&idPend6) {
+                                                        "Restarting..."
+                                                    } else {
+                                                        "Restart"
+                                                    }
+                                                }}
+                                            </button>
+                                            {if hasDetails {
+                                                view! {
+                                                    <button
+                                                        class="btn btn-sm btn-ghost"
+                                                        on:click=toggleExpand
+                                                    >
+                                                        {move || {
+                                                            if expandedIds.get().contains(&idExp1) {
+                                                                "Hide Details"
+                                                            } else {
+                                                                "Details"
+                                                            }
+                                                        }}
+                                                    </button>
+                                                }
+                                                    .into_any()
+                                            } else {
+                                                view! {}.into_any()
+                                            }}
+                                        </div>
+
+                                        {if hasDetails {
+                                            let ports = ports.clone();
+                                            let runtime = runtime.clone();
+                                            let restartPolicy = restartPolicy.clone();
+                                            let mounts = mounts.clone();
+                                            let created = created.clone();
+                                            view! {
+                                                <div
+                                                    class="container-details"
+                                                    style=move || {
+                                                        if expandedIds.get().contains(&idExp2) {
+                                                            "display: block"
+                                                        } else {
+                                                            "display: none"
+                                                        }
+                                                    }
+                                                >
+                                                    {if !runtime.is_empty() {
+                                                        view! {
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">"Runtime"</span>
+                                                                <span class="detail-value">
+                                                                    {runtime.clone()}
+                                                                </span>
+                                                            </div>
+                                                        }
+                                                            .into_any()
+                                                    } else {
+                                                        view! {}.into_any()
+                                                    }}
+                                                    {if !restartPolicy.is_empty() {
+                                                        view! {
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">
+                                                                    "Restart Policy"
+                                                                </span>
+                                                                <span class="detail-value">
+                                                                    {restartPolicy.clone()}
+                                                                </span>
+                                                            </div>
+                                                        }
+                                                            .into_any()
+                                                    } else {
+                                                        view! {}.into_any()
+                                                    }}
+                                                    {if !created.is_empty() {
+                                                        view! {
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">"Created"</span>
+                                                                <span class="detail-value">
+                                                                    {created.clone()}
+                                                                </span>
+                                                            </div>
+                                                        }
+                                                            .into_any()
+                                                    } else {
+                                                        view! {}.into_any()
+                                                    }}
+                                                    {if !ports.is_empty() {
+                                                        let portList = ports
+                                                            .iter()
+                                                            .map(|p| {
+                                                                view! {
+                                                                    <div class="detail-tag">
+                                                                        {p.clone()}
+                                                                    </div>
+                                                                }
+                                                            })
+                                                            .collect_view();
+                                                        view! {
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">"Ports"</span>
+                                                                <div class="detail-tags">
+                                                                    {portList}
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                            .into_any()
+                                                    } else {
+                                                        view! {}.into_any()
+                                                    }}
+                                                    {if !mounts.is_empty() {
+                                                        let mountList = mounts
+                                                            .iter()
+                                                            .map(|m| {
+                                                                view! {
+                                                                    <div class="detail-tag">
+                                                                        {m.clone()}
+                                                                    </div>
+                                                                }
+                                                            })
+                                                            .collect_view();
+                                                        view! {
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">"Mounts"</span>
+                                                                <div class="detail-tags">
+                                                                    {mountList}
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                            .into_any()
+                                                    } else {
+                                                        view! {}.into_any()
+                                                    }}
+                                                </div>
+                                            }
+                                                .into_any()
+                                        } else {
+                                            view! {}.into_any()
+                                        }}
+                                    </div>
+                                }
+                            })
+                            .collect_view();
+                        view! { <div class="container-list">{items}</div> }.into_any()
                     }
-                }
-                Some(Err(e)) => {
-                    view! {
-                        <div class="card">
-                            <p class="login-error">"Failed to load containers: " {e}</p>
-                        </div>
-                    }
-                        .into_any()
                 }
             }
         }}
-    }
-}
-
-#[component]
-fn ContainerCard<F>(container: ContainerSummary, on_action: F, is_loading: bool) -> impl IntoView
-where
-    F: Fn(String, String) + Clone + 'static,
-{
-    let isRunning = container.status == ContainerStatus::Running;
-    let isStopped = container.status == ContainerStatus::Stopped;
-    let statusCls = status_class(&container.status);
-    let statusText = status_label(&container.status);
-
-    let containerId = container.id.clone();
-    let containerName = container.name.clone();
-    let containerImage = container.image.clone();
-    let cpuPct = container.cpu_pct;
-    let memUsage = container.memory_usage_bytes;
-    let memLimit = container.memory_limit_bytes;
-    let netRx = container.net_rx_bytes;
-    let netTx = container.net_tx_bytes;
-    let runtime = container.runtime.clone();
-    let restartPolicy = container.restart_policy.clone();
-    let ports = container.ports.clone();
-    let mounts = container.mounts.clone();
-
-    let (detailsOpen, setDetailsOpen) = signal(false);
-
-    let startId = containerId.clone();
-    let startAction = on_action.clone();
-    let stopId = containerId.clone();
-    let stopAction = on_action.clone();
-    let restartId = containerId.clone();
-    let restartAction = on_action.clone();
-
-    view! {
-        <div class="container-card card">
-            <div class="container-header">
-                <div class="container-name-row">
-                    <span class=format!("status-badge {statusCls}")></span>
-                    <strong class="container-name">{containerName}</strong>
-                    <span class="container-status-text">{statusText}</span>
-                </div>
-            </div>
-            <div class="container-image">{containerImage}</div>
-
-            {if isRunning {
-                view! {
-                    <div class="container-stats">
-                        <div class="stat-pair">
-                            <span class="stat-label">"CPU"</span>
-                            <span class="stat-value">{format!("{:.1}%", cpuPct)}</span>
-                        </div>
-                        <div class="stat-pair">
-                            <span class="stat-label">"Memory"</span>
-                            <span class="stat-value">
-                                {format!(
-                                    "{} / {}",
-                                    format_bytes_mem(memUsage),
-                                    format_bytes_mem(memLimit),
-                                )}
-                            </span>
-                        </div>
-                        <div class="stat-pair">
-                            <span class="stat-label">"Net I/O"</span>
-                            <span class="stat-value">
-                                {format!(
-                                    "{} / {}",
-                                    format_bytes_net(netRx),
-                                    format_bytes_net(netTx),
-                                )}
-                            </span>
-                        </div>
-                    </div>
-                }
-                    .into_any()
-            } else {
-                view! { <div></div> }.into_any()
-            }}
-
-            <div class="container-details-toggle">
-                <button
-                    class="btn btn-ghost btn-sm"
-                    on:click=move |_| setDetailsOpen.set(!detailsOpen.get())
-                >
-                    {move || if detailsOpen.get() { "Hide details" } else { "Show details" }}
-                </button>
-            </div>
-
-            {move || {
-                if detailsOpen.get() {
-                    let portsList = ports.clone();
-                    let mountsList = mounts.clone();
-                    view! {
-                        <div class="container-details">
-                            <div class="stat-pair">
-                                <span class="stat-label">"Runtime"</span>
-                                <span class="stat-value">{runtime.clone()}</span>
-                            </div>
-                            <div class="stat-pair">
-                                <span class="stat-label">"Restart Policy"</span>
-                                <span class="stat-value">{restartPolicy.clone()}</span>
-                            </div>
-                            {if !portsList.is_empty() {
-                                view! {
-                                    <div class="stat-pair">
-                                        <span class="stat-label">"Ports"</span>
-                                        <span class="stat-value">{portsList.join(", ")}</span>
-                                    </div>
-                                }
-                                    .into_any()
-                            } else {
-                                view! { <div></div> }.into_any()
-                            }}
-                            {if !mountsList.is_empty() {
-                                view! {
-                                    <div class="stat-pair">
-                                        <span class="stat-label">"Mounts"</span>
-                                        <span class="stat-value detail-mounts">
-                                            {mountsList.join(", ")}
-                                        </span>
-                                    </div>
-                                }
-                                    .into_any()
-                            } else {
-                                view! { <div></div> }.into_any()
-                            }}
-                        </div>
-                    }
-                        .into_any()
-                } else {
-                    view! { <div></div> }.into_any()
-                }
-            }}
-
-            <div class="container-actions">
-                <button
-                    class="btn btn-ghost btn-sm"
-                    disabled=move || isRunning || is_loading
-                    on:click={
-                        let startAction = startAction.clone();
-                        let startId = startId.clone();
-                        move |_| {
-                            startAction(startId.clone(), "start".to_string());
-                        }
-                    }
-                >
-                    {if is_loading { "Starting..." } else { "Start" }}
-                </button>
-                <button
-                    class="btn btn-ghost btn-sm"
-                    disabled=move || isStopped || is_loading
-                    on:click={
-                        let stopAction = stopAction.clone();
-                        let stopId = stopId.clone();
-                        move |_| {
-                            stopAction(stopId.clone(), "stop".to_string());
-                        }
-                    }
-                >
-                    {if is_loading { "Stopping..." } else { "Stop" }}
-                </button>
-                <button
-                    class="btn btn-ghost btn-sm"
-                    disabled=move || !isRunning || is_loading
-                    on:click={
-                        let restartAction = restartAction.clone();
-                        let restartId = restartId.clone();
-                        move |_| {
-                            restartAction(restartId.clone(), "restart".to_string());
-                        }
-                    }
-                >
-                    {if is_loading { "Restarting..." } else { "Restart" }}
-                </button>
-            </div>
-        </div>
     }
 }

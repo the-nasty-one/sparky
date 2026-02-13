@@ -186,6 +186,6 @@ impl Default for ContainerSummary {
 
 impl Default for ContainerStatus {
     fn default() -> Self {
-        ContainerStatus::Unknown
+        Self::Unknown
     }
 }
