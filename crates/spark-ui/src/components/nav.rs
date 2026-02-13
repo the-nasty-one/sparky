@@ -15,11 +15,11 @@ pub fn Nav() -> impl IntoView {
                         <span>"Dashboard"</span>
                     </a>
                 </li>
-                <li class="nav-item disabled">
-                    <span>
+                <li class="nav-item">
+                    <a href="/containers">
                         <span class="nav-icon">"\u{2338}"</span>
                         <span>"Containers"</span>
-                    </span>
+                    </a>
                 </li>
                 <li class="nav-item disabled">
                     <span>
