@@ -1,6 +1,37 @@
 use spark_types::{GpuMetrics, GpuProcess};
 use tracing::warn;
 
+/// Try to parse a numeric value from an nvidia-smi field.
+/// Strips brackets, whitespace, and unit suffixes (e.g. "MiB", "W").
+/// Returns None for N/A variants like "[N/A]", "N/A", "N/A MiB", etc.
+fn parse_nvsmi_field<T: std::str::FromStr>(raw: &str) -> Option<T> {
+    let s = raw.trim().trim_matches(|c| c == '[' || c == ']').trim();
+    if s.eq_ignore_ascii_case("n/a") || s.is_empty() {
+        return None;
+    }
+    // Strip trailing unit suffixes like "MiB", "W", "%" so we can parse the number
+    let numeric = s.split_whitespace().next().unwrap_or(s);
+    numeric.parse::<T>().ok()
+}
+
+/// Read MemTotal from /proc/meminfo and return it in MiB.
+async fn read_proc_meminfo_total_mib() -> Option<u64> {
+    let contents = tokio::fs::read_to_string("/proc/meminfo").await.ok()?;
+    for line in contents.lines() {
+        if let Some(rest) = line.strip_prefix("MemTotal:") {
+            // Value is typically in kB, e.g. "MemTotal:       131841024 kB"
+            let kb: u64 = rest
+                .trim()
+                .split_whitespace()
+                .next()?
+                .parse()
+                .ok()?;
+            return Some(kb / 1024);
+        }
+    }
+    None
+}
+
 pub async fn collect() -> GpuMetrics {
     match collect_from_nvidia_smi().await {
         Ok(metrics) => metrics,
@@ -40,31 +71,33 @@ async fn collect_from_nvidia_smi() -> Result<GpuMetrics, String> {
     }
 
     let name = gpuFields[0].trim().to_string();
-    let utilizationPct = gpuFields[1]
-        .trim()
-        .parse::<f32>()
-        .inspect_err(|e| warn!("failed to parse GPU utilization '{}': {e}", gpuFields[1].trim()))
-        .unwrap_or(0.0);
-    let temperatureC = gpuFields[2]
-        .trim()
-        .parse::<u32>()
-        .inspect_err(|e| warn!("failed to parse GPU temperature '{}': {e}", gpuFields[2].trim()))
-        .unwrap_or(0);
-    let memoryUsedMib = gpuFields[3]
-        .trim()
-        .parse::<u64>()
-        .inspect_err(|e| warn!("failed to parse GPU memory used '{}': {e}", gpuFields[3].trim()))
-        .unwrap_or(0);
-    let memoryTotalMib = gpuFields[4]
-        .trim()
-        .parse::<u64>()
-        .inspect_err(|e| warn!("failed to parse GPU memory total '{}': {e}", gpuFields[4].trim()))
-        .unwrap_or(0);
-    let powerDrawW = gpuFields[5]
-        .trim()
-        .parse::<f32>()
-        .inspect_err(|e| warn!("failed to parse GPU power draw '{}': {e}", gpuFields[5].trim()))
-        .unwrap_or(0.0);
+    let utilizationPct = parse_nvsmi_field::<f32>(gpuFields[1]).unwrap_or_else(|| {
+        warn!("could not parse GPU utilization '{}'", gpuFields[1].trim());
+        0.0
+    });
+    let temperatureC = parse_nvsmi_field::<u32>(gpuFields[2]).unwrap_or_else(|| {
+        warn!("could not parse GPU temperature '{}'", gpuFields[2].trim());
+        0
+    });
+
+    // On unified-memory systems (e.g. DGX Spark GB10), nvidia-smi returns [N/A]
+    // for memory fields. Fall back to /proc/meminfo for total memory.
+    let memoryUsedMib = parse_nvsmi_field::<u64>(gpuFields[3]).unwrap_or(0);
+    let memoryTotalMib = match parse_nvsmi_field::<u64>(gpuFields[4]) {
+        Some(v) => v,
+        None => {
+            warn!(
+                "nvidia-smi memory.total is N/A ('{}'), falling back to /proc/meminfo",
+                gpuFields[4].trim()
+            );
+            read_proc_meminfo_total_mib().await.unwrap_or(0)
+        }
+    };
+
+    let powerDrawW = parse_nvsmi_field::<f32>(gpuFields[5]).unwrap_or_else(|| {
+        warn!("could not parse GPU power draw '{}'", gpuFields[5].trim());
+        0.0
+    });
 
     let processes = collect_gpu_processes().await.unwrap_or_default();
 

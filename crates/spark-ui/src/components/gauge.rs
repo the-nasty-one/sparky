@@ -29,7 +29,6 @@ pub fn Gauge(
     // clamp value to 0-100
     let clampedValue = value.clamp(0.0, 100.0);
     let filledLength = arcLength * (clampedValue / 100.0);
-    let dashOffset = arcLength - filledLength;
 
     // The gap portion of the dasharray (non-arc part)
     let gapLength = circumference - arcLength;
@@ -37,8 +36,9 @@ pub fn Gauge(
     // Background arc dasharray: show the arc portion, hide the rest
     let bgDasharray = format!("{arcLength} {gapLength}");
 
-    // Filled arc dasharray and offset
-    let fillDasharray = format!("{arcLength} {gapLength}");
+    // Filled arc: draw exactly filledLength of stroke, then hide everything else.
+    // Using circumference as the gap ensures the unfilled portion is fully hidden.
+    let fillDasharray = format!("{filledLength} {circumference}");
 
     // Rotate so the arc starts at bottom-left (210 degrees from 3 o'clock)
     // The arc spans from 210° to 330° going clockwise through top
@@ -79,7 +79,7 @@ pub fn Gauge(
                     stroke=color.clone()
                     stroke-width=format!("{STROKE_WIDTH}")
                     stroke-dasharray=fillDasharray
-                    stroke-dashoffset=format!("{dashOffset}")
+                    stroke-dashoffset="0"
                 />
                 // Center text (counter-rotate so text is upright)
                 <text
