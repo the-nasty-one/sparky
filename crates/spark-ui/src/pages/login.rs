@@ -4,31 +4,18 @@ use leptos::prelude::*;
 async fn login(token: String) -> Result<(), ServerFnError> {
     use http::header::{HeaderValue, SET_COOKIE};
     use leptos_axum::ResponseOptions;
+    use spark_types::AuthToken;
 
-    let expectedToken = std::env::var("SPARK_AUTH_TOKEN")
-        .or_else(|_| -> Result<String, String> {
-            let configPath = std::env::var("SPARK_CONFIG")
-                .unwrap_or_else(|_| "/etc/spark-console/config.toml".to_string());
-            let configContent =
-                std::fs::read_to_string(&configPath).map_err(|e| e.to_string())?;
-            let configTable: toml::Table =
-                configContent.parse::<toml::Table>().map_err(|e| e.to_string())?;
-            configTable
-                .get("auth")
-                .and_then(|a: &toml::Value| a.get("token"))
-                .and_then(|t: &toml::Value| t.as_str())
-                .map(|s: &str| s.to_string())
-                .ok_or_else(|| "no auth token in config".to_string())
-        })
-        .map_err(|e| ServerFnError::new(format!("config error: {e}")))?;
+    let authToken = use_context::<AuthToken>()
+        .ok_or_else(|| ServerFnError::new("auth context unavailable"))?;
 
-    if token != expectedToken {
+    if token != authToken.0 {
         return Err(ServerFnError::new("invalid token"));
     }
 
     let responseOptions = expect_context::<ResponseOptions>();
     let cookieValue = format!(
-        "session_token={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800"
+        "session_token={token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=604800"
     );
     responseOptions.insert_header(
         SET_COOKIE,

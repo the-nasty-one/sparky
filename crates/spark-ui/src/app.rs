@@ -6,6 +6,7 @@ use leptos_router::{
 };
 
 use crate::components::nav::Nav;
+use crate::components::toast::ToastProvider;
 use crate::pages::dashboard::DashboardPage;
 use crate::pages::login::LoginPage;
 
@@ -34,12 +35,14 @@ pub fn App() -> impl IntoView {
     view! {
         <Stylesheet id="leptos" href="/pkg/spark-console.css" />
         <Title text="Spark Console" />
-        <Router>
-            <Routes fallback=|| view! { <p>"Page not found."</p> }.into_any()>
-                <Route path=StaticSegment("") view=DashboardView />
-                <Route path=StaticSegment("login") view=LoginView />
-            </Routes>
-        </Router>
+        <ToastProvider>
+            <Router>
+                <Routes fallback=|| view! { <p>"Page not found."</p> }.into_any()>
+                    <Route path=StaticSegment("") view=DashboardView />
+                    <Route path=StaticSegment("login") view=LoginView />
+                </Routes>
+            </Router>
+        </ToastProvider>
     }
 }
 

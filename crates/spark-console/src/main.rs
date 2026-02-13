@@ -59,6 +59,7 @@ async fn main() {
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
     use spark_api::middleware::auth::AppState;
+    use spark_types::AuthToken;
     use spark_ui::{shell, App};
     use tower_http::trace::TraceLayer;
     use tracing_subscriber::{fmt, EnvFilter};
@@ -87,11 +88,7 @@ async fn main() {
         appConfig.server.port
     );
 
-    // Set auth token as env var for server functions
-    unsafe {
-        std::env::set_var("SPARK_AUTH_TOKEN", &appConfig.auth.token);
-        std::env::set_var("SPARK_CONFIG", &configPath);
-    }
+    let authToken = AuthToken(appConfig.auth.token.clone());
 
     let appState = AppState {
         auth_token: appConfig.auth.token.clone(),
@@ -99,7 +96,7 @@ async fn main() {
     };
 
     // Get Leptos configuration
-    let conf = get_configuration(None).unwrap();
+    let conf = get_configuration(None).expect("failed to load Leptos configuration");
     let leptosOptions = conf.leptos_options;
     let addr = leptosOptions.site_addr;
 
@@ -109,7 +106,7 @@ async fn main() {
     // Build the API sub-router with its own state, then convert to a stateless Router
     let apiRouter = spark_api::api_router(appState.clone());
 
-    // Build page auth middleware using a closure that checks the env var
+    // Build page auth middleware that checks session cookie
     let pageAuthLayer = axum::middleware::from_fn_with_state(
         appState,
         spark_api::middleware::auth::require_page_auth,
@@ -120,10 +117,20 @@ async fn main() {
     // - Leptos routes use LeptosOptions as state
     // - Page auth is applied as a layer
     let app = Router::new()
-        .leptos_routes(&leptosOptions, routes, {
-            let leptosOptions = leptosOptions.clone();
-            move || shell(leptosOptions.clone())
-        })
+        .leptos_routes_with_context(
+            &leptosOptions,
+            routes,
+            {
+                let authToken = authToken.clone();
+                move || {
+                    leptos::prelude::provide_context(authToken.clone());
+                }
+            },
+            {
+                let leptosOptions = leptosOptions.clone();
+                move || shell(leptosOptions.clone())
+            },
+        )
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptosOptions)
         .merge(apiRouter)
@@ -131,10 +138,11 @@ async fn main() {
         .layer(TraceLayer::new_for_http());
 
     tracing::info!("listening on {addr}");
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await
+        .unwrap_or_else(|e| panic!("failed to bind to {addr}: {e}"));
     axum::serve(listener, app.into_make_service())
         .await
-        .unwrap();
+        .expect("server exited with error");
 }
 
 #[cfg(not(feature = "ssr"))]

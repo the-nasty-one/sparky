@@ -16,7 +16,6 @@ leptos_axum = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 http = { workspace = true, optional = true }
-toml = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true }
 console_error_panic_hook = { workspace = true }
 
@@ -32,5 +31,4 @@ ssr = [
     "dep:leptos_axum",
     "dep:spark-providers",
     "dep:http",
-    "dep:toml",
 ]
