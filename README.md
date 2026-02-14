@@ -7,8 +7,8 @@ A Rust web dashboard for managing an NVIDIA DGX Spark (aarch64). Built with Lept
 Five-crate Rust workspace:
 
 - **spark-types** — Shared data structures (compiles for native + wasm32)
-- **spark-providers** — System metric collectors (GPU, CPU, memory, disk, uptime)
-- **spark-api** — Axum REST API routes with token auth middleware
+- **spark-providers** — System metric collectors (GPU, CPU, memory, disk, uptime, Docker, models)
+- **spark-api** — Axum REST API routes
 - **spark-ui** — Leptos frontend with SSR and WASM hydration
 - **spark-console** — Binary that wires everything into a single server
 
@@ -22,7 +22,7 @@ Five-crate Rust workspace:
 ## Development
 
 ```bash
-# Copy config and set your token
+# Copy config
 cp config.example.toml config.toml
 
 # Start dev server with auto-reload
@@ -58,7 +58,6 @@ This builds for `aarch64-unknown-linux-gnu`, copies the binary to the Spark, and
 # Create config directory
 sudo mkdir -p /etc/spark-console
 sudo cp config.example.toml /etc/spark-console/config.toml
-# Edit token in config.toml
 
 # Install systemd service
 sudo cp deploy/spark-console.service /etc/systemd/system/
@@ -74,20 +73,17 @@ See `config.example.toml`:
 [server]
 bind = "0.0.0.0"
 port = 3000
-
-[auth]
-token = "change-me-on-first-run"
 ```
 
-## Auth
-
-Token-based authentication. Enter the token from your config on the login page. The token is stored as an HttpOnly cookie for browser sessions. API access uses `Authorization: Bearer <token>` header.
+The dashboard is designed for LAN-only, single-user operation with no authentication.
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/auth/login` | Authenticate with token |
 | GET | `/api/v1/system` | Full system metrics |
 | GET | `/api/v1/system/gpu` | GPU metrics only |
 | GET | `/api/v1/system/memory` | Memory metrics only |
+| GET | `/api/v1/containers` | List all Docker containers |
+| POST | `/api/v1/containers/action` | Start/stop/restart a container |
+| GET | `/api/v1/models` | List discovered model files |

@@ -83,6 +83,7 @@ async fn collect_from_nvidia_smi() -> Result<GpuMetrics, String> {
     // On unified-memory systems (e.g. DGX Spark GB10), nvidia-smi returns [N/A]
     // for memory fields. Fall back to /proc/meminfo for total memory.
     let memoryUsedMib = parse_nvsmi_field::<u64>(gpuFields[3]).unwrap_or(0);
+    let mut unifiedMemory = false;
     let memoryTotalMib = match parse_nvsmi_field::<u64>(gpuFields[4]) {
         Some(v) => v,
         None => {
@@ -90,6 +91,7 @@ async fn collect_from_nvidia_smi() -> Result<GpuMetrics, String> {
                 "nvidia-smi memory.total is N/A ('{}'), falling back to /proc/meminfo",
                 gpuFields[4].trim()
             );
+            unifiedMemory = true;
             read_proc_meminfo_total_mib().await.unwrap_or(0)
         }
     };
@@ -108,6 +110,7 @@ async fn collect_from_nvidia_smi() -> Result<GpuMetrics, String> {
         memory_used_mib: memoryUsedMib,
         memory_total_mib: memoryTotalMib,
         power_draw_w: powerDrawW,
+        unified_memory: unifiedMemory,
         processes,
     })
 }
@@ -164,6 +167,7 @@ fn mock_gpu_metrics() -> GpuMetrics {
         memory_used_mib: 15360,
         memory_total_mib: 98304,
         power_draw_w: 185.0,
+        unified_memory: false,
         processes: vec![
             GpuProcess {
                 pid: 1234,

@@ -1,6 +1,11 @@
 use spark_types::{ContainerActionResult, ContainerStatus, ContainerSummary};
 use std::collections::HashMap;
+use tokio::time::{timeout, Duration};
 use tracing::warn;
+
+const PS_TIMEOUT: Duration = Duration::from_secs(10);
+const STATS_TIMEOUT: Duration = Duration::from_secs(15);
+const INSPECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Parse a Docker size string like "3.578MiB", "121.7GiB", "15.6kB", "126B" into bytes.
 fn parse_docker_size(s: &str) -> u64 {
@@ -103,16 +108,20 @@ struct InspectData {
 }
 
 async fn collect_container_list() -> Result<Vec<ContainerSummary>, String> {
-    let output = tokio::process::Command::new("docker")
-        .args([
-            "ps",
-            "-a",
-            "--format",
-            "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}\t{{.Ports}}\t{{.CreatedAt}}",
-        ])
-        .output()
-        .await
-        .map_err(|e| format!("failed to run docker ps: {e}"))?;
+    let output = timeout(
+        PS_TIMEOUT,
+        tokio::process::Command::new("docker")
+            .args([
+                "ps",
+                "-a",
+                "--format",
+                "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}\t{{.Ports}}\t{{.CreatedAt}}",
+            ])
+            .output(),
+    )
+    .await
+    .map_err(|_| "docker ps timed out".to_string())?
+    .map_err(|e| format!("failed to run docker ps: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -164,16 +173,20 @@ async fn collect_container_list() -> Result<Vec<ContainerSummary>, String> {
 }
 
 async fn collect_stats() -> Result<HashMap<String, StatsData>, String> {
-    let output = tokio::process::Command::new("docker")
-        .args([
-            "stats",
-            "--no-stream",
-            "--format",
-            "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}",
-        ])
-        .output()
-        .await
-        .map_err(|e| format!("failed to run docker stats: {e}"))?;
+    let output = timeout(
+        STATS_TIMEOUT,
+        tokio::process::Command::new("docker")
+            .args([
+                "stats",
+                "--no-stream",
+                "--format",
+                "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}",
+            ])
+            .output(),
+    )
+    .await
+    .map_err(|_| "docker stats timed out".to_string())?
+    .map_err(|e| format!("failed to run docker stats: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -230,54 +243,67 @@ async fn collect_stats() -> Result<HashMap<String, StatsData>, String> {
 }
 
 async fn collect_inspect(ids: &[String]) -> HashMap<String, InspectData> {
+    if ids.is_empty() {
+        return HashMap::new();
+    }
+
+    let mut args = vec![
+        "inspect".to_string(),
+        "--format".to_string(),
+        "{{.Id}}\t{{.HostConfig.Runtime}}\t{{.HostConfig.RestartPolicy.Name}}\t{{json .Mounts}}".to_string(),
+    ];
+    args.extend(ids.iter().cloned());
+
+    let output = match timeout(
+        INSPECT_TIMEOUT,
+        tokio::process::Command::new("docker")
+            .args(&args)
+            .output(),
+    )
+    .await
+    {
+        Ok(Ok(o)) => o,
+        Ok(Err(e)) => {
+            warn!("docker inspect failed: {e}");
+            return HashMap::new();
+        }
+        Err(_) => {
+            warn!("docker inspect timed out");
+            return HashMap::new();
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        warn!("docker inspect failed: {stderr}");
+        return HashMap::new();
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let mut map = HashMap::new();
 
-    for id in ids {
-        match inspect_one(id).await {
-            Ok(data) => {
-                map.insert(id.clone(), data);
-            }
-            Err(e) => {
-                warn!("docker inspect failed for {id}: {e}");
-            }
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = line.splitn(4, '\t').collect();
+        if fields.len() < 4 {
+            continue;
+        }
+
+        let fullId = fields[0].trim().to_string();
+        let runtime = fields[1].trim().to_string();
+        let restartPolicy = fields[2].trim().to_string();
+        let mounts = parse_mounts_json(fields[3].trim());
+
+        // Match on short ID prefix since docker ps returns short IDs
+        if let Some(originalId) = ids.iter().find(|i| fullId.starts_with(i.as_str()) || i.starts_with(&fullId)) {
+            map.insert(originalId.clone(), InspectData { runtime, restart_policy: restartPolicy, mounts });
         }
     }
 
     map
-}
-
-async fn inspect_one(id: &str) -> Result<InspectData, String> {
-    let output = tokio::process::Command::new("docker")
-        .args([
-            "inspect",
-            id,
-            "--format",
-            "{{.HostConfig.Runtime}}\t{{.HostConfig.RestartPolicy.Name}}\t{{json .Mounts}}",
-        ])
-        .output()
-        .await
-        .map_err(|e| format!("failed to run docker inspect: {e}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("docker inspect failed: {stderr}"));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let line = stdout.trim();
-    let fields: Vec<&str> = line.splitn(3, '\t').collect();
-
-    let runtime = fields.first().map(|s| s.trim().to_string()).unwrap_or_default();
-    let restartPolicy = fields.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
-    let mountsJson = fields.get(2).map(|s| s.trim()).unwrap_or("[]");
-
-    let mounts = parse_mounts_json(mountsJson);
-
-    Ok(InspectData {
-        runtime,
-        restart_policy: restartPolicy,
-        mounts,
-    })
 }
 
 fn parse_mounts_json(raw: &str) -> Vec<String> {

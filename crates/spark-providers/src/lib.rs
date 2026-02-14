@@ -5,6 +5,7 @@ pub mod disk;
 pub mod docker;
 pub mod gpu;
 pub mod memory;
+pub mod models;
 pub mod uptime;
 
 use spark_types::SystemMetrics;

@@ -82,9 +82,16 @@ async fn main() {
         config_path: configPath,
     };
 
-    // Get Leptos configuration
+    // Get Leptos configuration and override site_addr with config values
     let conf = get_configuration(None).expect("failed to load Leptos configuration");
-    let leptosOptions = conf.leptos_options;
+    let mut leptosOptions = conf.leptos_options;
+    let configAddr: std::net::SocketAddr = format!(
+        "{}:{}",
+        appConfig.server.bind, appConfig.server.port
+    )
+    .parse()
+    .expect("invalid bind address in config");
+    leptosOptions.site_addr = configAddr;
     let addr = leptosOptions.site_addr;
 
     // Generate route list from Leptos App
