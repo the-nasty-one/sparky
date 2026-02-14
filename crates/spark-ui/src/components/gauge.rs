@@ -15,6 +15,10 @@ pub fn Gauge(
     unit: String,
     /// Stroke color for the filled arc
     color: String,
+    /// Optional override for the center display text.
+    /// When provided, this is shown instead of the computed value.
+    #[prop(optional)]
+    display_value: Option<String>,
 ) -> impl IntoView {
     let SIZE: f32 = 120.0;
     let STROKE_WIDTH: f32 = 8.0;
@@ -45,10 +49,15 @@ pub fn Gauge(
     // SVG circle starts at 3 o'clock. We rotate -90 for top, then +30 more = 150° total
     let ROTATION: f32 = 150.0;
 
-    let displayValue = if value == value.floor() {
-        format!("{:.0}", clampedValue)
-    } else {
-        format!("{:.1}", clampedValue)
+    let displayText = match display_value {
+        Some(dv) => dv,
+        None => {
+            if value == value.floor() {
+                format!("{:.0}", clampedValue)
+            } else {
+                format!("{:.1}", clampedValue)
+            }
+        }
     };
 
     view! {
@@ -88,7 +97,7 @@ pub fn Gauge(
                     class="gauge-text gauge-value"
                     transform=format!("rotate({} {} {})", -ROTATION, CENTER, CENTER)
                 >
-                    {displayValue}
+                    {displayText}
                 </text>
                 <text
                     x=format!("{CENTER}")

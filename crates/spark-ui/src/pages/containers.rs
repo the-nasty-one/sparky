@@ -83,7 +83,9 @@ pub fn ContainersPage() -> impl IntoView {
         };
 
         fetch();
-        set_interval(fetch, std::time::Duration::from_secs(5));
+        let handle = set_interval_with_handle(fetch, std::time::Duration::from_secs(5))
+            .expect("failed to set interval");
+        on_cleanup(move || handle.clear());
     }
 
     view! {

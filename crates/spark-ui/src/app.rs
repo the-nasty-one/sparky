@@ -9,6 +9,7 @@ use crate::components::nav::Nav;
 use crate::components::toast::ToastProvider;
 use crate::pages::containers::ContainersPage;
 use crate::pages::dashboard::DashboardPage;
+use crate::pages::models::ModelsPage;
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -17,6 +18,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />
@@ -40,6 +42,7 @@ pub fn App() -> impl IntoView {
                 <Routes fallback=|| view! { <p>"Page not found."</p> }.into_any()>
                     <Route path=StaticSegment("") view=DashboardView />
                     <Route path=StaticSegment("containers") view=ContainersView />
+                    <Route path=StaticSegment("models") view=ModelsView />
                 </Routes>
             </Router>
         </ToastProvider>
@@ -65,6 +68,18 @@ fn ContainersView() -> impl IntoView {
             <Nav />
             <main class="main-content">
                 <ContainersPage />
+            </main>
+        </div>
+    }
+}
+
+#[component]
+fn ModelsView() -> impl IntoView {
+    view! {
+        <div class="app-layout">
+            <Nav />
+            <main class="main-content">
+                <ModelsPage />
             </main>
         </div>
     }

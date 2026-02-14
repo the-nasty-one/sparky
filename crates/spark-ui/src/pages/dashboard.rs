@@ -21,6 +21,14 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
+fn format_mib(mib: u64) -> String {
+    if mib >= 1024 {
+        format!("{:.1} GiB", mib as f64 / 1024.0)
+    } else {
+        format!("{mib} MiB")
+    }
+}
+
 fn format_uptime(seconds: u64) -> String {
     let days = seconds / 86400;
     let hours = (seconds % 86400) / 3600;
@@ -32,6 +40,16 @@ fn gauge_color(value: f32) -> &'static str {
     if value >= 90.0 {
         "#ef4444"
     } else if value >= 70.0 {
+        "#f59e0b"
+    } else {
+        "#76b900"
+    }
+}
+
+fn temp_gauge_color(tempC: u32) -> &'static str {
+    if tempC >= 80 {
+        "#ef4444"
+    } else if tempC >= 65 {
         "#f59e0b"
     } else {
         "#76b900"
@@ -59,7 +77,9 @@ pub fn DashboardPage() -> impl IntoView {
         fetch();
 
         // Poll every 2 seconds — updates the signal in place, no flicker
-        set_interval(fetch, std::time::Duration::from_secs(2));
+        let handle = set_interval_with_handle(fetch, std::time::Duration::from_secs(2))
+            .expect("failed to set interval");
+        on_cleanup(move || handle.clear());
     }
 
     view! {
@@ -108,6 +128,10 @@ fn DashboardContent(metrics: SystemMetrics) -> impl IntoView {
     let gpuPower = metrics.gpu.power_draw_w;
     let gpuName = metrics.gpu.name.clone();
     let gpuProcesses = metrics.gpu.processes.clone();
+    let gpuUnifiedMemory = metrics.gpu.unified_memory;
+
+    // Temperature: normalize to 0-100 scale where 30°C = 0% and 90°C = 100%
+    let tempNormalized = ((gpuTemp as f32 - 30.0) / 60.0 * 100.0).clamp(0.0, 100.0);
 
     let memUsed = metrics.memory.used_bytes;
     let memTotal = metrics.memory.total_bytes;
@@ -127,6 +151,32 @@ fn DashboardContent(metrics: SystemMetrics) -> impl IntoView {
 
     let uptimeFormatted = format_uptime(metrics.uptime.seconds);
 
+    // GPU Memory card: branch on unified memory
+    let gpuMemoryCard = if gpuUnifiedMemory {
+        view! {
+            <MetricCard title="GPU Memory".to_string()>
+                <div class="gauge-container">
+                    <div class="uptime-display">"Unified Memory"</div>
+                    <div class="gauge-label">{format_mib(gpuMemTotal)} " total"</div>
+                    <div class="gauge-label">"Per-GPU VRAM tracking not available"</div>
+                </div>
+            </MetricCard>
+        }
+            .into_any()
+    } else {
+        view! {
+            <MetricCard title="GPU Memory".to_string()>
+                <Gauge
+                    value=gpuMemPct
+                    label=format!("{} / {} MiB", gpuMemUsed, gpuMemTotal)
+                    unit="%".to_string()
+                    color=gauge_color(gpuMemPct).to_string()
+                />
+            </MetricCard>
+        }
+            .into_any()
+    };
+
     view! {
         <div class="dashboard-grid">
             <MetricCard title="GPU Utilization".to_string()>
@@ -140,21 +190,15 @@ fn DashboardContent(metrics: SystemMetrics) -> impl IntoView {
 
             <MetricCard title="GPU Temperature".to_string()>
                 <Gauge
-                    value=gpuTemp as f32
+                    value=tempNormalized
                     label="Temperature".to_string()
                     unit="\u{00B0}C".to_string()
-                    color=gauge_color(gpuTemp as f32).to_string()
+                    color=temp_gauge_color(gpuTemp).to_string()
+                    display_value=format!("{gpuTemp}")
                 />
             </MetricCard>
 
-            <MetricCard title="GPU Memory".to_string()>
-                <Gauge
-                    value=gpuMemPct
-                    label=format!("{} / {} MiB", gpuMemUsed, gpuMemTotal)
-                    unit="%".to_string()
-                    color=gauge_color(gpuMemPct).to_string()
-                />
-            </MetricCard>
+            {gpuMemoryCard}
 
             <MetricCard title="GPU Power".to_string()>
                 <div class="gauge-container">

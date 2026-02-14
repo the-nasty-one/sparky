@@ -17,6 +17,7 @@ pub struct GpuMetrics {
     pub memory_used_mib: u64,
     pub memory_total_mib: u64,
     pub power_draw_w: f32,
+    pub unified_memory: bool,
     pub processes: Vec<GpuProcess>,
 }
 
@@ -77,6 +78,7 @@ impl Default for GpuMetrics {
             memory_used_mib: 0,
             memory_total_mib: 0,
             power_draw_w: 0.0,
+            unified_memory: false,
             processes: Vec::new(),
         }
     }
@@ -188,4 +190,13 @@ impl Default for ContainerStatus {
     fn default() -> Self {
         Self::Unknown
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ModelEntry {
+    pub name: String,
+    pub path: String,
+    pub size_bytes: u64,
+    pub format: String,
+    pub modified: String,
 }
